@@ -3,6 +3,7 @@ import pandas as pd
 import sqlite3
 import json
 import os
+import re
 from datetime import date, datetime
 from pathlib import Path
 
@@ -88,13 +89,10 @@ def init_db():
         c.execute("SELECT COUNT(*) FROM airdrop_tracker")
         if c.fetchone()[0] == 0 and SEED_FILE.exists():
             seed_from_json(conn)
-        # Connection is NOT closed here - managed by @st.cache_resource
-        # Closing it would cause "cannot operate on a closed database" on reruns
     except Exception as e:
         st.error(f"Error initializing database: {e}")
 
 def seed_from_json(conn):
-    """Isi database dari initial_data.json"""
     try:
         with open(SEED_FILE, 'r') as f:
             data = json.load(f)
@@ -171,6 +169,49 @@ def get_status_badge(status):
         return f'<span class="badge badge-active">{status}</span>'
     return f'<span class="badge" style="background:#30363d;color:#c9d1d9;">{status}</span>'
 
+def parse_tweet_text(text):
+    """
+    Heuristic parser untuk mengekstrak info airdrop dari teks tweet.
+    """
+    res = {
+        'project_name': '',
+        'token_name': '',
+        'status': 'Potential / Speculative',
+        'url': '',
+        'requirements': text,
+        'notes': ''
+    }
+    
+    # 1. Cari TOKEN ($ABC)
+    tokens = re.findall(r'\$[A-Z0-9]{2,8}', text)
+    if tokens:
+        res['token_name'] = tokens[0]
+        
+    # 2. Cari URL
+    urls = re.findall(r'https?://\S+', text)
+    if urls:
+        res['url'] = urls[0]
+        
+    # 3. Cari Nama Project (Sangat Heuristik: Kata pertama sebelum token atau URL)
+    lines = text.split('\n')
+    if lines:
+        first_line = lines[0].strip()
+        # Bersihkan emoji dan karakter aneh
+        clean_name = re.sub(r'[^\w\s]', '', first_line).strip().split(' ')[0]
+        if clean_name:
+            res['project_name'] = clean_name
+            
+    # 4. Deteksi Status
+    text_lower = text.lower()
+    if 'confirm' in text_lower or 'official' in text_lower:
+        res['status'] = 'Confirmed'
+    elif 'testnet' in text_lower:
+        res['status'] = 'Testnet Active'
+    elif 'farm' in text_lower or 'live' in text_lower:
+        res['status'] = 'Active / Farming'
+        
+    return res
+
 # Inisialisasi DB
 init_db()
 
@@ -180,7 +221,7 @@ with st.sidebar:
     st.caption("Testnet & Mainnet Farming Monitor")
     st.divider()
 
-    menu = st.radio("Navigasi", ["📊 Dashboard", "➕ Tambah Airdrop", "✏️ Edit/Hapus", "📥 Import/Export"], label_visibility="collapsed")
+    menu = st.radio("Navigasi", ["📊 Dashboard", "➕ Tambah Airdrop", "✏️ Edit/Hapus", "📡 AI Twitter Scraper", "📥 Import/Export"], label_visibility="collapsed")
     st.divider()
 
     st.subheader("🔍 Filter")
@@ -386,6 +427,89 @@ elif menu == "✏️ Edit/Hapus":
                 st.warning("🗑️ Data dihapus.")
                 st.cache_data.clear()
                 st.rerun()
+
+# ==================== AI TWITTER SCRAPER ====================
+elif menu == "📡 AI Twitter Scraper":
+    st.title("📡 AI Twitter Scraper")
+    st.caption("Tempel teks tweet atau thread airdrop untuk di-parse secara otomatis.")
+    
+    with st.container():
+        tweet_text = st.text_area("Tempel Teks Tweet di Sini", height=200, placeholder="Contoh: New confirmed airdrop for Asentum $ASE. Join the testnet now: https://asentum.xyz ...")
+        
+        if st.button("🔍 Parse Tweet", use_container_width=True, type="primary"):
+            if not tweet_text:
+                st.error("Silakan tempel teks tweet terlebih dahulu.")
+            else:
+                parsed = parse_tweet_text(tweet_text)
+                st.session_state['parsed_data'] = parsed
+                st.success("✅ Tweet berhasil di-parse. Silakan tinjau data di bawah.")
+
+    if 'parsed_data' in st.session_state:
+        st.divider()
+        st.subheader("📝 Tinjau Hasil Parsing")
+        
+        parsed = st.session_state['parsed_data']
+        
+        with st.form("parsed_confirm_form"):
+            col1, col2 = st.columns(2)
+            with col1:
+                p_name = st.text_input("Project Name", value=parsed['project_name'])
+                p_token = st.text_input("Token", value=parsed['token_name'])
+                p_status = st.selectbox("Status", [
+                    "Confirmed",
+                    "Potential / Speculative",
+                    "Testnet Active",
+                    "Active / Farming",
+                    "Snapshot Taken",
+                    "Verification Open",
+                    "Claimable",
+                    "Distributed / Done"
+                ], index=[
+                    "Confirmed",
+                    "Potential / Speculative",
+                    "Testnet Active",
+                    "Active / Farming",
+                    "Snapshot Taken",
+                    "Verification Open",
+                    "Claimable",
+                    "Distributed / Done"
+                ].index(parsed['status']) if parsed['status'] in [
+                    "Confirmed",
+                    "Potential / Speculative",
+                    "Testnet Active",
+                    "Active / Farming",
+                    "Snapshot Taken",
+                    "Verification Open",
+                    "Claimable",
+                    "Distributed / Done"
+                ] else 1)
+                p_url = st.text_input("URL", value=parsed['url'])
+
+            with col2:
+                p_start = st.date_input("Start Date", value=None)
+                p_end = st.date_input("End Date", value=None)
+                p_req = st.text_area("Requirements", value=parsed['requirements'])
+                p_notes = st.text_area("Notes", value=parsed['notes'])
+
+            if st.form_submit_button("💾 Konfirmasi & Tambah ke Database", use_container_width=True, type="primary"):
+                if not p_name:
+                    st.error("Project Name wajib diisi.")
+                else:
+                    new_data = {
+                        'project_name': p_name,
+                        'token_name': p_token or None,
+                        'status': p_status,
+                        'url': p_url or None,
+                        'start_date': p_start.isoformat() if p_start else None,
+                        'end_date': p_end.isoformat() if p_end else None,
+                        'requirements': p_req or None,
+                        'notes': p_notes or None,
+                    }
+                    insert_data(new_data)
+                    st.success(f"✅ Project '{p_name}' berhasil ditambahkan!")
+                    st.cache_data.clear()
+                    del st.session_state['parsed_data']
+                    st.rerun()
 
 # ==================== IMPORT / EXPORT ====================
 elif menu == "📥 Import/Export":
