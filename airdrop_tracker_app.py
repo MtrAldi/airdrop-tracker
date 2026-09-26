@@ -54,41 +54,44 @@ hr { border-color: var(--border); }
 """, unsafe_allow_html=True)
 
 # --- Database Path ---
-# Gunakan path relatif yang works di lokal & Streamlit Cloud
 BASE_DIR = Path(__file__).parent
 DB_PATH = BASE_DIR / "airdrop_tracker.db"
 SEED_FILE = BASE_DIR / "initial_data.json"
 
 @st.cache_resource
 def get_connection():
-    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+    conn = sqlite3.connect(str(DB_PATH), check_same_thread=False)
     conn.execute('PRAGMA journal_mode=WAL')
     return conn
 
 def init_db():
     conn = get_connection()
-    c = conn.cursor()
-    c.execute('''CREATE TABLE IF NOT EXISTS airdrop_tracker (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        project_name TEXT NOT NULL,
-        token_name TEXT,
-        status TEXT NOT NULL,
-        url TEXT,
-        start_date DATE,
-        end_date DATE,
-        requirements TEXT,
-        notes TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP
-    )''')
-    c.execute('CREATE INDEX IF NOT EXISTS idx_project_name ON airdrop_tracker(project_name)')
-    conn.commit()
-    
-    # Auto-seed dari initial_data.json jika tabel kosong
-    c.execute("SELECT COUNT(*) FROM airdrop_tracker")
-    if c.fetchone()[0] == 0 and SEED_FILE.exists():
-        seed_from_json(conn)
-    conn.close()
+    try:
+        c = conn.cursor()
+        c.execute('''CREATE TABLE IF NOT EXISTS airdrop_tracker (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            project_name TEXT NOT NULL,
+            token_name TEXT,
+            status TEXT NOT NULL,
+            url TEXT,
+            start_date DATE,
+            end_date DATE,
+            requirements TEXT,
+            notes TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP
+        )''')
+        c.execute('CREATE INDEX IF NOT EXISTS idx_project_name ON airdrop_tracker(project_name)')
+        conn.commit()
+
+        # Auto-seed from initial_data.json if table is empty
+        c.execute("SELECT COUNT(*) FROM airdrop_tracker")
+        if c.fetchone()[0] == 0 and SEED_FILE.exists():
+            seed_from_json(conn)
+        # Connection is NOT closed here - managed by @st.cache_resource
+        # Closing it would cause "cannot operate on a closed database" on reruns
+    except Exception as e:
+        st.error(f"Error initializing database: {e}")
 
 def seed_from_json(conn):
     """Isi database dari initial_data.json"""
@@ -97,7 +100,6 @@ def seed_from_json(conn):
             data = json.load(f)
         c = conn.cursor()
         for row in data:
-            # Filter kolom yang valid
             valid_cols = ['project_name', 'token_name', 'status', 'url', 
                           'start_date', 'end_date', 'requirements', 'notes']
             row_data = {k: v for k, v in row.items() if k in valid_cols and pd.notna(v)}
@@ -107,7 +109,7 @@ def seed_from_json(conn):
                 placeholders = ', '.join(['?'] * len(cols))
                 c.execute(f'INSERT INTO airdrop_tracker ({", ".join(cols)}) VALUES ({placeholders})', vals)
         conn.commit()
-        st.success(f"✅ Database diisi otomatis dari {SEED_FILE.name} ({len(data)} records)")
+        st.success(f"Database diisi otomatis dari {SEED_FILE.name} ({len(data)} records)")
     except Exception as e:
         st.warning(f"Gagal seeding dari JSON: {e}")
 
@@ -181,7 +183,6 @@ with st.sidebar:
     menu = st.radio("Navigasi", ["📊 Dashboard", "➕ Tambah Airdrop", "✏️ Edit/Hapus", "📥 Import/Export"], label_visibility="collapsed")
     st.divider()
 
-    # Filter global
     st.subheader("🔍 Filter")
     f_status = st.multiselect("Status", ["Confirmed", "Potential", "Testnet", "Active", "Done", "Distributed"], default=[])
     f_search = st.text_input("Cari Project / Token / URL")
