@@ -1,8 +1,10 @@
 import streamlit as st
 import pandas as pd
 import sqlite3
-from datetime import date, datetime
+import json
 import os
+from datetime import date, datetime
+from pathlib import Path
 
 # Konfigurasi Halaman
 st.set_page_config(
@@ -51,8 +53,11 @@ hr { border-color: var(--border); }
 </style>
 """, unsafe_allow_html=True)
 
-# --- Database ---
-DB_PATH = '/root/hermes-agent/airdrop_tracker.db'
+# --- Database Path ---
+# Gunakan path relatif yang works di lokal & Streamlit Cloud
+BASE_DIR = Path(__file__).parent
+DB_PATH = BASE_DIR / "airdrop_tracker.db"
+SEED_FILE = BASE_DIR / "initial_data.json"
 
 @st.cache_resource
 def get_connection():
@@ -78,6 +83,33 @@ def init_db():
     )''')
     c.execute('CREATE INDEX IF NOT EXISTS idx_project_name ON airdrop_tracker(project_name)')
     conn.commit()
+    
+    # Auto-seed dari initial_data.json jika tabel kosong
+    c.execute("SELECT COUNT(*) FROM airdrop_tracker")
+    if c.fetchone()[0] == 0 and SEED_FILE.exists():
+        seed_from_json(conn)
+    conn.close()
+
+def seed_from_json(conn):
+    """Isi database dari initial_data.json"""
+    try:
+        with open(SEED_FILE, 'r') as f:
+            data = json.load(f)
+        c = conn.cursor()
+        for row in data:
+            # Filter kolom yang valid
+            valid_cols = ['project_name', 'token_name', 'status', 'url', 
+                          'start_date', 'end_date', 'requirements', 'notes']
+            row_data = {k: v for k, v in row.items() if k in valid_cols and pd.notna(v)}
+            if row_data:
+                cols = list(row_data.keys())
+                vals = list(row_data.values())
+                placeholders = ', '.join(['?'] * len(cols))
+                c.execute(f'INSERT INTO airdrop_tracker ({", ".join(cols)}) VALUES ({placeholders})', vals)
+        conn.commit()
+        st.success(f"✅ Database diisi otomatis dari {SEED_FILE.name} ({len(data)} records)")
+    except Exception as e:
+        st.warning(f"Gagal seeding dari JSON: {e}")
 
 def load_data(filters=None):
     conn = get_connection()
@@ -137,7 +169,7 @@ def get_status_badge(status):
         return f'<span class="badge badge-active">{status}</span>'
     return f'<span class="badge" style="background:#30363d;color:#c9d1d9;">{status}</span>'
 
-# Inisialisasi
+# Inisialisasi DB
 init_db()
 
 # --- Sidebar ---
@@ -157,7 +189,7 @@ with st.sidebar:
     f_date_to = st.date_input("Sampai Tanggal", value=None, format="YYYY-MM-DD")
 
     st.divider()
-    st.caption(f"DB: {os.path.basename(DB_PATH)}")
+    st.caption(f"DB: {DB_PATH.name}")
     if st.button("🔄 Refresh Data", use_container_width=True):
         st.cache_data.clear()
         st.rerun()
@@ -303,7 +335,7 @@ elif menu == "✏️ Edit/Hapus":
             with col1:
                 project_name = st.text_input("Nama Project *", value=row['project_name'])
                 token_name = st.text_input("Nama Token", value=row['token_name'] if pd.notna(row['token_name']) else "")
-                status = st.selectbox("Status *", [
+                status_options = [
                     "Confirmed",
                     "Potential / Speculative",
                     "Testnet Active",
@@ -312,25 +344,10 @@ elif menu == "✏️ Edit/Hapus":
                     "Verification Open",
                     "Claimable",
                     "Distributed / Done"
-                ], index=[
-                    "Confirmed",
-                    "Potential / Speculative",
-                    "Testnet Active",
-                    "Active / Farming",
-                    "Snapshot Taken",
-                    "Verification Open",
-                    "Claimable",
-                    "Distributed / Done"
-                ].index(row['status']) if row['status'] in [
-                    "Confirmed",
-                    "Potential / Speculative",
-                    "Testnet Active",
-                    "Active / Farming",
-                    "Snapshot Taken",
-                    "Verification Open",
-                    "Claimable",
-                    "Distributed / Done"
-                ] else 0)
+                ]
+                current_status = row['status']
+                status_idx = status_options.index(current_status) if current_status in status_options else 0
+                status = st.selectbox("Status *", status_options, index=status_idx)
                 url = st.text_input("URL", value=row['url'] if pd.notna(row['url']) else "")
 
             with col2:
