@@ -1,45 +1,44 @@
-# 🪂 Airdrop Tracker Testnet
+# Airdrop Tracker Testnet
 
-Web app untuk melacak & memantau airdrop crypto (testnet & mainnet) yang sedang difarming. Dibangun dengan Streamlit + SQLite dengan tema **Terminal/CRT Green**.
+Web app untuk melacak dan memantau airdrop crypto (testnet dan mainnet) yang sedang difarming. Dibangun dengan Streamlit dan SQLite, bertema terminal hijau.
 
-## ✨ Fitur
+## Fitur
 
-- **📊 Dashboard** — ringkasan metrik (total tracked, confirmed, testnet, active) + tabel dengan badge status & countdown sisa hari
-- **➕ Tambah Airdrop** — form input: nama project, token, status, URL, tanggal mulai/selesai, persyaratan, catatan
-- **✏️ Edit / Hapus** — ubah status atau hapus entry yang sudah selesai
-- **📥 Import / Export** — backup & restore data via CSV
-- **🔍 Filter & Pencarian** — filter berdasarkan status, kata kunci, dan rentang tanggal
-- **💾 Penyimpanan Lokal** — SQLite, tanpa perlu server database eksternal
+- **Dashboard**: metrik ringkas (total tracked, confirmed, testnet, active) plus tabel dengan badge status warna dan hitung mundur sisa hari
+- **Tambah Airdrop**: input nama project, token, status, URL, tanggal mulai dan selesai, persyaratan, catatan
+- **Edit / Hapus**: ubah status atau hapus entry yang sudah selesai
+- **Parser Tweet**: tempel teks tweet atau thread, parser heuristik mengisi project, token, status, dan URL untuk ditinjau sebelum disimpan
+- **Import / Export**: backup dan restore data lewat CSV
+- **Filter dan pencarian**: saring berdasarkan status, kata kunci, dan rentang tanggal
+- **Penyimpanan lokal**: SQLite, tanpa server database eksternal
 
-## 🚀 Cara Menjalankan
+## Cara Menjalankan
 
-### Prasyarat
-- Python 3.10+
-- pip
-
-### Instalasi
+Prasyarat: Python 3.10+ dan pip.
 
 ```bash
-git clone https://github.com/MtrAldi/airdrop-tracker-MtrAldi.git
-cd airdrop-tracker-MtrAldi
+git clone https://github.com/MtrAldi/airdrop-tracker.git
+cd airdrop-tracker
 pip install -r requirements.txt
 streamlit run airdrop_tracker_app.py
 ```
 
-Buka browser ke `http://localhost:8501`.
+Buka `http://localhost:8501`.
 
-## 📁 Struktur Project
+## Struktur Project
 
 ```
 .
-├── airdrop_tracker_app.py   # Aplikasi Streamlit utama
-├── requirements.txt         # Dependencies (streamlit, pandas)
-└── airdrop_tracker.db       # Database SQLite (auto-generated)
+├── airdrop_tracker_app.py     # aplikasi Streamlit utama
+├── initial_data.json          # 16 data seed, dipakai saat tabel masih kosong
+├── requirements.txt
+├── .streamlit/config.toml     # warna dasar dan font bawaan Streamlit
+└── airdrop_tracker.db         # SQLite, dibuat otomatis saat pertama jalan
 ```
 
-> File `airdrop_tracker.db` akan otomatis dibuat saat aplikasi pertama kali dijalankan.
+Tabel `airdrop_tracker` hanya diisi dari `initial_data.json` ketika masih kosong. Hapus `airdrop_tracker.db` untuk mengulang seeding.
 
-## 🏷️ Status Airdrop
+## Status Airdrop
 
 | Status | Deskripsi |
 |--------|-----------|
@@ -52,25 +51,24 @@ Buka browser ke `http://localhost:8501`.
 | `Claimable` | Token bisa diklaim |
 | `Distributed / Done` | Selesai terdistribusi |
 
-## 🌐 Deploy
+## Deploy
 
-### Streamlit Community Cloud (gratis)
-1. Push repo ini ke GitHub (private/public sama saja)
-2. Buka [share.streamlit.io](https://share.streamlit.io)
-3. Pilih repo `MtrAldi/airdrop-tracker-MtrAldi` → branch `main` → file `airdrop_tracker_app.py`
-4. Klik **Deploy**
+Streamlit Community Cloud, gratis. Push repo ke GitHub, buka [share.streamlit.io](https://share.streamlit.io), pilih repo `MtrAldi/airdrop-tracker`, branch `main`, file `airdrop_tracker_app.py`, lalu klik Deploy.
 
-## 🛠️ Teknologi
+Filepaths di app menunjuk ke direktori source, yang di Cloud bersifat read-only. Set env var `HOME` atau jalankan di home directory yang writable sebelum deploy agar SQLite bisa dibuat.
 
-- [Streamlit](https://streamlit.io/) — web framework
-- [Pandas](https://pandas.pydata.org/) — manipulasi data
-- [SQLite](https://www.sqlite.org/) — database
+## Teknologi
 
-## 📝 Catatan
+- [Streamlit](https://streamlit.io/) - web framework
+- [Pandas](https://pandas.pydata.org/) - manipulasi data
+- [SQLite](https://www.sqlite.org/) - database
 
-- Data default sudah terisi 16 airdrop terpilih per September 2026 (Canopy, GIWA, Variational, Limitless, Konnex, dll). Silakan edit/hapus sesuai kebutuhan.
-- **Bukan saran keuangan (NFA).** Lakukan riset sendiri sebelum farming.
+## Catatan
 
-## 📄 Lisensi
+- Parser tweet berbasis regex, bukan LLM. Nama project diambil dari pola "airdrop for X", kalau tidak ada lalu kata kapital pertama yang bukan kata umum. Selalu tinjau hasil parsing sebelum disimpan.
+- Data seed berisi 16 airdrop per September 2026 (Canopy, GIWA, Variational, Limitless, Konnex, dan lainnya). Silakan edit atau hapus sesuai kebutuhan.
+- Bukan saran keuangan. Riset sendiri sebelum farming.
 
-MIT License — bebas dipakai & dimodifikasi.
+## Lisensi
+
+MIT License.
